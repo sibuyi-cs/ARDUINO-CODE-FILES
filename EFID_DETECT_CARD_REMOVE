@@ -1,0 +1,55 @@
+#include <SPI.h>
+#include <MFRC522.h>
+
+#define SS_PIN 10
+#define RST_PIN 9
+
+int count = 0;
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+
+// Variable to store UID as a string
+String cardUID = "";
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+  Serial.println("Ready — scan a card");
+}
+
+void loop() {
+  // Look for a card
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    
+    // Reset the UID string
+    cardUID = "";
+
+    Serial.print("UID tag:");
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      if (rfid.uid.uidByte[i] < 0x10) cardUID += "0";
+      cardUID += String(rfid.uid.uidByte[i], HEX);
+      cardUID += " ";
+    }
+
+    Serial.println(cardUID); // Print stored UID
+    cardUID.trim(); // Remove trailing space if needed
+
+
+    rfid.PCD_StopCrypto1();
+    delay(200);
+    count=0;
+  }
+
+  if (cardUID == "") {
+    count++;
+
+  }
+  if (count==3){
+    Serial.println("NO Card");
+    count=0;
+  }
+  cardUID = "";
+
+  delay(50);
+}
