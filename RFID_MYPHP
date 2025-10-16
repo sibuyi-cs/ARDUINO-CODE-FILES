@@ -1,0 +1,88 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+
+
+WiFiClient client;  // create a WiFi client
+
+#define SS_PIN 2
+#define RST_PIN -1
+
+const char* ssid = "SS-C4M4R0";
+const char* password = "55555555";
+
+const String serverURL = "http://192.168.0.7/lib_system/update.php";
+const String scanner_number_dev = "SCANNER_01";
+
+int count = 0;
+MFRC522 rfid(SS_PIN, RST_PIN);
+String cardUID = "";
+
+void sendToServer(String scannerNumber, String bookUID) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(client, serverURL); // <-- use WiFiClient here
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    String postData = "scanner_number_dev=" + scannerNumber + "&book_rfid=" + bookUID;
+    int httpResponseCode = http.POST(postData);
+
+    if (httpResponseCode > 0) {
+      Serial.println("HTTP Response code: " + String(httpResponseCode));
+      Serial.println("Server response: " + http.getString());
+    } else {
+      Serial.println("Error on sending POST: " + String(httpResponseCode));
+    }
+    http.end();
+  } else {
+    Serial.println("WiFi disconnected");
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+  Serial.println("Ready — scan a card");
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi");
+}
+
+void loop() {
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    cardUID = "";
+    Serial.print("UID tag: ");
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      if (rfid.uid.uidByte[i] < 0x10) cardUID += "0";
+      cardUID += String(rfid.uid.uidByte[i], HEX);
+    }
+    cardUID.toUpperCase();
+    Serial.println(cardUID);
+
+    sendToServer(scanner_number_dev, cardUID);
+
+    rfid.PCD_StopCrypto1();
+    delay(200);
+    count = 0;
+  }
+
+  if (cardUID == "") {
+    count++;
+  }
+
+  if (count == 3) {
+    Serial.println("NO Card");
+    sendToServer(scanner_number_dev, "NO_RFID");
+    count = 0;
+  }
+
+  cardUID = "";
+  delay(50);
+}
